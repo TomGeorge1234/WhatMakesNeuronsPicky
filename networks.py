@@ -45,7 +45,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.nn import functional as F
 from torch import optim
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 import time
 from torch.utils.data import DataLoader, ConcatDataset
 
@@ -87,6 +87,7 @@ class simple_network(nn.Module):
         self.fraction = hyperparameters['fraction']
         #initialises some attributes
         self.optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        self.type_of_network = 'simple_network'
         #arrays for later analysis
         self.hist = []
         self.RI = [[],[],[],[],[]]
@@ -283,8 +284,8 @@ class simple_network(nn.Module):
 class MNIST_network(nn.Module):    
     #initialise the class, collate the train/test data and build the deep model 
     def __init__(self, hyperparameters):      
-        print("Initialising model")
-        print("Loading and partitioning MNIST data")
+        # print("Initialising model")
+        # print("Loading and partitioning MNIST data")
         
         self.task_sets = hyperparameters['task_sets']
         self.hidden_size = hyperparameters['hidden_size']
@@ -300,12 +301,14 @@ class MNIST_network(nn.Module):
         self.num_classes = len(self.task_sets[0])
         self.loss, self.acc, self.ewc = {}, {}, {} 
         self.set_data()  
+        self.type_of_network = 'MNIST_network'
+
 
         if self.is_CNN == True: #this can be a CNN...
             super(MNIST_network, self).__init__()
-            self.conv1 = nn.Conv2d(1,4,kernel_size=5)
-            self.conv2 = nn.Conv2d(4,16,kernel_size=5)
-            self.fc1 = nn.Linear(4*4*16 + self.task_count, self.hidden_size)
+            self.conv1 = nn.Conv2d(1,4,kernel_size=3)
+            self.conv2 = nn.Conv2d(4,12,kernel_size=3)
+            self.fc1 = nn.Linear(5*5*12 + self.task_count, self.hidden_size)
             self.fc2 = nn.Linear(self.hidden_size, self.num_classes)
         elif self.is_CNN == False: #...or just a fully connected NN
             super(MNIST_network, self).__init__()
@@ -377,11 +380,10 @@ class MNIST_network(nn.Module):
                 self.acc[task].append(self.test(self.test_loaders[task]))
 
         if self.train_mode == 'sequential':
-            for task in range(self.task_count):
-                print("Training task %g" %(task+1)); time.sleep(.5)
+            for task in tqdm(range(self.task_count),desc='Task',leave=False):
                 self.loss[task] = []
                 self.loss[task].append(self.do_train_epoch(self.train_loaders[task],do_train=False))
-                for _ in tqdm(range(self.epochs)):
+                for _ in tqdm(range(self.epochs),desc='Epoch',leave=False):
                     self.loss[task].append(self.do_train_epoch(self.train_loaders[task]))
                     for sub_task in range(task + 1):
                         self.acc[sub_task].append(self.test(self.test_loaders[sub_task]))
@@ -389,19 +391,17 @@ class MNIST_network(nn.Module):
         elif self.train_mode == 'random':
             self.loss[0] = []
             self.loss[0].append(self.do_train_epoch(self.train_loader,do_train=False))
-            print("Training all tasks randomly"); time.sleep(.5)
-            for _ in tqdm(range(self.epochs)):
+            for _ in tqdm(range(self.epochs),desc='Epoch',leave=False):
                 self.loss[0].append(self.do_train_epoch(self.train_loader))
                 for sub_task in range(self.task_count):
                     self.acc[sub_task].append(self.test(self.test_loaders[sub_task]))
     
         elif self.train_mode == 'ewc':
-            for task in range(self.task_count):
-                print("Training task %g" %(task+1)); time.sleep(.5)
+            for task in tqdm(range(self.task_count),desc='Task',leave=False):
                 self.loss[task] = []
                 if task == 0:
                     self.loss[task].append(self.do_train_epoch(self.train_loaders[task],do_train=False))
-                    for _ in tqdm(range(self.epochs)):
+                    for _ in tqdm(range(self.epochs),desc='Epoch',leave=False):
                         self.loss[task].append(self.do_train_epoch(self.train_loaders[task]))
                         self.acc[task].append(self.test(self.test_loaders[task]))
                 else:
@@ -411,7 +411,7 @@ class MNIST_network(nn.Module):
                     old_tasks = random.sample(old_tasks, k=self.sample_size)
                     self.loss[task].append(self.do_train_epoch(self.train_loaders[task],do_train=False))
                     EWC_now = EWC(self, old_tasks)
-                    for _ in tqdm(range(self.epochs)):
+                    for _ in tqdm(range(self.epochs),desc='Epoch',leave=False):
                         self.loss[task].append(self.do_train_epoch(self.train_loaders[task], ewc=EWC_now, importance=self.importance))
                         for sub_task in range(task + 1):
                             self.acc[sub_task].append(self.test(self.test_loaders[sub_task]))
@@ -434,9 +434,9 @@ class MNIST_network(nn.Module):
                 loss.backward()
                 self.optimizer.step()
         #print ratio of ewc loss to real loss for debugging
-        if self.train_mode == 'ewc' and importance > 0:
-            print("%.2f" %((F.cross_entropy(output, target) / (importance*ewc.penalty(self))).item()))
-            print(importance)
+        # if self.train_mode == 'ewc' and importance > 0:
+        #     print("%.2f" %((F.cross_entropy(output, target) / (importance*ewc.penalty(self))).item()))
+        #     print(importance)
         return epoch_loss / len(data_loader)
     
     #test a dataloader and return accuracy

@@ -21,7 +21,7 @@ from torch.nn import functional as F
 from torch.autograd import Variable
 from torchvision import datasets
 from torch.utils.data import Dataset
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 import time 
 import numpy as np
 import matplotlib 
@@ -37,63 +37,169 @@ import matplotlib.pyplot as plt
 # =============================================================================
 # plot_training plots the testing abs error throughout training for all models (and shows an average) 
 # =============================================================================
-def plot_training(models, title=None):  #only works for simple_network lists, not MNIST_networks
-    fig, ax = plt.subplots(figsize = (2,1.5))
-    task1 = np.zeros(len(np.array(models[0].hist)))
-    task2 = np.zeros(len(np.array(models[0].hist)))    
-    for i in range(len(models)):
-        ax.plot(np.array(models[i].hist)[:,0], linewidth=0.5, alpha=0.2, c='C0')
-        task1 += np.array(models[i].hist)[:,0]
-        ax.plot(np.array(models[i].hist)[:,1], linewidth=0.5, alpha=0.2, c='C1')
-        task2 += np.array(models[i].hist)[:,1]
-    task1, task2 = task1/len(models), task2/len(models)
-    ax.plot(task1, linewidth=1, c='C0', label = r'Task 1: %s' %models[-1].task1_description )
-    ax.plot(task2, linewidth=1, c='C1', label =r'Task 2: %s' %models[-1].task2_description)
-    ax.set_ylabel('Absolute test error')
-    ax.set_xlabel('Epochs')
-    if models[-1].train_mode == 'replay':
-        ax.axvspan(0, models[-1].epochs,color='C0', alpha=0.1)  #vertical shading
-        ax.axvspan(models[-1].epochs, 2*models[-1].epochs,color='C1', alpha=0.1)  #vertical shading
-    ax.legend()
-    if title != None:
-        fig.suptitle("%s" %title)
-    plt.show()
-    return 
+def plot_training(models, title=None, axis_scale='linear'):  #only works for simple_network lists, not MNIST_networks
+    if models[0].type_of_network == 'simple_network':    
+        fig, ax = plt.subplots(figsize = (2,1.5))
+        task1 = np.zeros(len(np.array(models[0].hist)))
+        task2 = np.zeros(len(np.array(models[0].hist)))    
+        for i in range(len(models)):
+            ax.plot(np.array(models[i].hist)[:,0], linewidth=0.5, alpha=0.2, c='C0')
+            task1 += np.array(models[i].hist)[:,0]
+            ax.plot(np.array(models[i].hist)[:,1], linewidth=0.5, alpha=0.2, c='C1')
+            task2 += np.array(models[i].hist)[:,1]
+        task1, task2 = task1/len(models), task2/len(models)
+        ax.plot(task1, linewidth=1, c='C0', label = r'Task 1: %s' %models[-1].task1_description )
+        ax.plot(task2, linewidth=1, c='C1', label =r'Task 2: %s' %models[-1].task2_description)
+        ax.set_ylabel('Absolute test error')
+        ax.set_xlabel('Epochs')
+        if models[-1].train_mode == 'replay':
+            ax.axvspan(0, models[-1].epochs,color='C0', alpha=0.1)  #vertical shading
+            ax.axvspan(models[-1].epochs, 2*models[-1].epochs,color='C1', alpha=0.1)  #vertical shading
+        ax.legend()
+        if title != None:
+            fig.suptitle("%s" %title)
+        if axis_scale == 'log':
+            ax.set_xscale('log')
+        plt.show()
+        return
+        
+    if models[0].type_of_network == 'MNIST_network': 
+        fig, axs = plt.subplots(1,2,figsize=(4,1.5))
+        if models[0].train_mode != 'random':
+            all_models_losses = {}
+            for j in range(models[0].task_count):
+                all_models_losses[j] = np.zeros(len(models[0].loss[j]))
+            for i in range(len(models)):
+                for t, v in models[i].loss.items():
+                    axs[0].plot(list(range(t * models[i].epochs, (t + 1) * models[i].epochs + 1)), v, linewidth=0.5, alpha=0.2, color='C%g'%t)
+                    all_models_losses[t] += np.array(v)
+            for t, v in models[0].loss.items():
+                axs[0].plot(list(range(t * models[0].epochs, (t + 1) * models[0].epochs + 1)), all_models_losses[t]/len(models), label="Task %g" %(t+1), linewidth=1, alpha=1, color='C%g'%t)
+    
+        else:
+            all_models_loss = np.zeros(len(models[0].loss[0]))
+            for i in range(len(models)):
+                for t, v in models[i].loss.items():
+                    axs[0].plot(list(range(t * models[i].epochs, (t + 1) * models[i].epochs + 1)), v, color='C6', linewidth=0.5, alpha=0.2)
+                    all_models_loss += v
+            for t, v in models[0].loss.items():
+                axs[0].plot(list(range(t * models[i].epochs, (t + 1) * models[i].epochs + 1)), all_models_loss/len(models), label="All tasks", color='C6', linewidth=1, alpha=1)
+            
+        axs[0].set_xlabel("Epoch")
+        axs[0].set_ylabel("Cross entropy loss")
+        axs[0].legend(loc = 1)
+        
+        all_models_acc = {}
+        for j in range(models[0].task_count):
+            all_models_acc[j] = np.zeros(len(models[0].acc[j]))
+        for i in range(len(models)):
+            for t, v in models[i].acc.items():
+                if models[i].train_mode == 'random':
+                    axs[1].plot(list(range(models[i].total_epochs + 1)), v,linewidth=0.5, alpha=0.2, color='C%g'%t)
+                    all_models_acc[t] += v
+                else:
+                    axs[1].plot(list(range(t * models[i].epochs, models[i].total_epochs + 1)), v,linewidth=0.5, alpha=0.2, color='C%g'%t)
+                    all_models_acc[t] += v
+        for t, v in models[i].acc.items():
+            if models[0].train_mode == 'random':
+                axs[1].plot(list(range(models[i].total_epochs + 1)), all_models_acc[t]/len(models), label="Task %g" %(t+1), color='C%g'%t)
+            else:
+                axs[1].plot(list(range(t * models[i].epochs, models[i].total_epochs + 1)), all_models_acc[t]/len(models), label="Task %g" %(t+1), color='C%g'%t)
+        
+        axs[1].set_xlabel("Epoch")
+        axs[1].set_ylabel("Test accuracy")
+        axs[1].set_ylim(0,1)
+        axs[1].legend(loc=4)
+        
+        if models[0].train_mode != 'random':
+            for i in range(models[0].task_count):
+                axs[0].axvspan(i*models[0].epochs, (i+1)*models[0].epochs,color='C%g' %i, alpha=0.1)  #vertical shading
+                axs[1].axvspan(i*models[0].epochs, (i+1)*models[0].epochs,color='C%g' %i, alpha=0.1)  #vertical shading
+        plt.show()
+        return 
 
 # =============================================================================
 # plot_RI plots the fractional task variance throughout the layers 
 # =============================================================================
 def plot_RI(models, show_threshold=False, title=None):  #only works for simple_network lists, not MNIST_networks
-    RI = [[],[],[],[],[]]
-    for model in models:
-        for i in range(len(RI)):
-            RI[i].extend(list(model.RI[i]))
-    fig, axs = plt.subplots(1,4,sharey = True, figsize = (4,0.8))
-    for i in range(4):
-        n, bins, patches = axs[i].hist(RI[i], weights=np.ones(len(RI[i])) / len(RI[i]),bins=np.linspace(-1,1,11))
-        bin_centre = [(bin_right + bin_left)/2 for (bin_right, bin_left) in zip(list(bins[1:]),list(bins[:-1]))]
-        col = (bin_centre - min(bin_centre))/(max(bin_centre) - min(bin_centre))
-        cm = matplotlib.colors.LinearSegmentedColormap.from_list('my_cmap',['C1','C0'], N=1000)
-        for c, p in zip(col, patches):
-                plt.setp(p, 'facecolor', cm(c))
-        plt.gca().yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1))
-        axs[i].set_title("Hidden layer %g" %(i+1))
-        axs[i].set_xlim([-1,1])
-        axs[i].set_xlabel(r'$\mathcal{RI}$')
-        if i == 0:
-            axs[i].set_ylabel('Proportion')            
-        if i == 3 and show_threshold == True: 
-            axs[i].axvline(0.9,color='r',linestyle='--',linewidth=0.8)
-            axs[i].axvline(-0.9,color='r',linestyle='--',linewidth=0.8)
-    for i in range(4):
-        axs[i].text(0.51,axs[i].get_ylim()[-1]*0.92, r"+ %g%%" %int((100*(np.sum(np.isnan(np.array(RI[i])))/len(RI[i])))), fontdict = {'color':'grey', 'fontsize':4})
-    if title != None:
-        fig.suptitle("%s" %title)
-    plt.show()
-    return 
+    
+    if models[0].type_of_network == 'simple_network':
+        RI = [[],[],[],[],[]]
+        for model in models:
+            for i in range(len(RI)):
+                RI[i].extend(list(model.RI[i]))
+        fig, axs = plt.subplots(1,4,sharey = True, figsize = (4,0.8))
+        for i in range(4):
+            n, bins, patches = axs[i].hist(RI[i], weights=np.ones(len(RI[i])) / len(RI[i]),bins=np.linspace(-1,1,11))
+            bin_centre = [(bin_right + bin_left)/2 for (bin_right, bin_left) in zip(list(bins[1:]),list(bins[:-1]))]
+            col = (bin_centre - min(bin_centre))/(max(bin_centre) - min(bin_centre))
+            cm = matplotlib.colors.LinearSegmentedColormap.from_list('my_cmap',['C1','C0'], N=1000)
+            for c, p in zip(col, patches):
+                    plt.setp(p, 'facecolor', cm(c))
+            plt.gca().yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1))
+            axs[i].set_title("Hidden layer %g" %(i+1))
+            axs[i].set_xlim([-1,1])
+            axs[i].set_xlabel(r'$\mathcal{RI}$')
+            if i == 0:
+                axs[i].set_ylabel('Proportion')            
+            if i == 3 and show_threshold == True: 
+                axs[i].axvline(0.9,color='r',linestyle='--',linewidth=0.8)
+                axs[i].axvline(-0.9,color='r',linestyle='--',linewidth=0.8)
+        for i in range(4):
+            axs[i].text(0.51,axs[i].get_ylim()[-1]*0.92, r"+ %g%%" %int((100*(np.sum(np.isnan(np.array(RI[i])))/len(RI[i])))), fontdict = {'color':'grey', 'fontsize':4})
+        if title != None:
+            fig.suptitle("%s" %title)
+        plt.show()
+        return
+        
+        
+    if models[0].type_of_network == 'MNIST_network':
+        combined_RI = {}
+        for i in range(models[0].task_count):
+            for j in range(models[0].task_count):
+                combined_RI[i,j] = []
+        for i in range(models[0].task_count):
+            for j in range(models[0].task_count):
+                for k in range(len(models)):
+                    combined_RI[i,j].extend(list(models[k].RI[i,j]))
+                combined_RI[i,j] = np.array(combined_RI[i,j]) 
+                
+        fig, axs = plt.subplots(models[0].task_count-1, models[0].task_count-1, figsize=(1*(models[0].task_count-1),1*(models[0].task_count-1)), sharex=True, sharey=True)
+        # fig.suptitle("RI histograms across task pairs")
+        for i in range(models[0].task_count-1):
+            for j in range(i):
+                axs[i][j].axis("off")
+            for j in range(i,models[0].task_count-1):
+                n, bins, patches = axs[i][j].hist(combined_RI[i,j+1],  weights=np.ones(len(combined_RI[i,j+1])) / len(combined_RI[i,j+1]), bins=np.linspace(-1,1,11))
+                bin_centres = [(bin_right + bin_left)/2 for (bin_right, bin_left) in zip(list(bins[1:]),list(bins[:-1]))]
+                col = [(bin_centre + 1) / 2 for bin_centre in bin_centres]
+                cm = matplotlib.colors.LinearSegmentedColormap.from_list('my_cmap',['C%g' %(j+1),'C%g' %i], N=1000)
+                for c, p in zip(col, patches):
+                        plt.setp(p, 'facecolor', cm(c))
+                plt.gca().yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1))
+                colors = {}
+                for color in range(models[0].task_count):
+                    colors[color] = matplotlib.colors.to_rgba_array('C%g' %color)
+                    colors[color][0][-1] = 0.3
+                if i == 0:
+                    # axs[i][j].set_title("Task %g" %(j+2), backgroundcolor=colors[j+1][0])
+                    axs[i][j].set_title("Task %g" %(j+2), color='C%g' %(j+1))
+                    if j == 0:
+                        axs[i][j].set_xlim([-1,1])
+                        axs[i][j].set_xticks([-1,0,1])
+                        axs[i][j].set_xticklabels(['-1','0','1'])
+                if j == i:
+                    # axs[i][j].set_ylabel("Task %g" %(j+1), backgroundcolor=colors[j][0])
+                    axs[i][j].set_ylabel("Task %g" %(j+1), color='C%g' %(j))
+        for i in range(models[0].task_count-1):
+            for j in range(i,models[0].task_count-1):
+                    axs[i][j].text(0.5,axs[i][j].get_ylim()[-1]*0.9, r"+ %g%%" %int((100*(np.sum(np.isnan(np.array(combined_RI[i,j+1])))/len(combined_RI[i,j+1])))),fontsize=4, color='grey')
+        plt.show()
+        return 
 
 # =============================================================================
 # plot_lesion_test lesions (sets to zero) penultimate layer neurons with high or low RI then performs a test and plots the performance drop.
+# this ONLY works for simple_models not MNIST_models
 # =============================================================================
 def plot_lesion_test(models, RI_threshold=0.9, title=None): #only works for simple_network lists, not MNIST_networks
     
@@ -137,24 +243,36 @@ def plot_lesion_test(models, RI_threshold=0.9, title=None): #only works for simp
 # =============================================================================
 def train_multiple(model_class, hyperparameters = None,  N_models=20, ):
     models = []    
-    print("Training %g models" %N_models); time.sleep(.5)
-    for _ in tqdm(range(N_models)):
-        fail_count = 0
-        current_model_successful = False
-        while current_model_successful == False:
-            if fail_count >= 10:
-                print("\n This model doesn't train well, aborting")
-                return models
-            model = model_class(hyperparameters)
-            model.train_model()
-            if model.abs_error()[0]<0.05 and model.abs_error()[1]<0.05:
-                model.get_RI()
-                models.append(model)
-                current_model_successful = True
-            else:
-                fail_count += 1
-    return models
+    
+    if model_class == 'simple_network':
+        from networks import simple_network
+        for _ in tqdm(range(N_models), desc="Model"):
+            fail_count = 0
+            current_model_successful = False
+            while current_model_successful == False:
+                if fail_count >= 10:
+                    print("\n This model doesn't train well, aborting")
+                    return models
+                model = simple_network(hyperparameters)
+                model.train_model()
+                if model.abs_error()[0]<0.05 and model.abs_error()[1]<0.05:
+                    model.get_RI()
+                    models.append(model)
+                    current_model_successful = True
+                else:
+                    fail_count += 1
+        return models
 
+    elif model_class == 'MNIST_network':
+        from networks import MNIST_network
+        for _ in tqdm(range(N_models),desc='Model'):
+            model = MNIST_network(hyperparameters)
+            model.train_model()
+            model.get_RI()
+            models.append(model)
+        return models
+
+        
 
 
 
@@ -187,9 +305,9 @@ class MNIST_subset(Dataset):
         try: 
             trainset
         except NameError:
-            print("Downloading MNIST datasets")
-            trainset = datasets.MNIST('./data', train=True, download=True)
-            testset = datasets.MNIST('./data', train=False, download=True)
+            # print("Downloading MNIST datasets")
+            trainset = datasets.MNIST('./mnistdata', train=True, download=True)
+            testset = datasets.MNIST('./mnistdata', train=False, download=True)
         else: 
             pass 
         
