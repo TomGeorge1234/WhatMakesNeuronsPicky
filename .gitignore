@@ -1,0 +1,4 @@
+experiments.py
+*.pptx
+.ipynb_checkpoints
+__pycache__
